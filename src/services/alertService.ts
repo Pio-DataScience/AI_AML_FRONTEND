@@ -1,8 +1,12 @@
 import axios from "axios";
 import { MacroPayload, MicroPayload, NetworkGraphData } from "@/types/alert";
+import { getApiBaseUrl } from "./apiConfig";
 
-const api = axios.create({
-    baseURL: "http://localhost:8000/api",
+const api = axios.create();
+
+api.interceptors.request.use((config) => {
+    config.baseURL = getApiBaseUrl("/api");
+    return config;
 });
 
 export const getMacroAlert = async (

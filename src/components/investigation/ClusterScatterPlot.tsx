@@ -4,6 +4,7 @@ import React, { useEffect, useState, useMemo, useCallback } from "react";
 import Plot from "@/components/PlotlyWrapper";
 import axios from "axios";
 import { Card, Spinner, Button, Skeleton, Chip } from "@heroui/react";
+import { getApiBaseUrl } from "@/services/apiConfig";
 
 // --- Types ---
 
@@ -125,7 +126,7 @@ export default function ClusterScatterPlot({ targetCusNum, className, style }: C
             if (!targetCusNum || targetCusNum === "DEFAULT") return;
             setIsMapLoading(true);
             try {
-                const url = `http://localhost:8000/api/viz/clusters?target_cus_num=${targetCusNum}`;
+                const url = getApiBaseUrl(`/viz/clusters?target_cus_num=${targetCusNum}`);
                 const res = await axios.get<ClusterResponse>(url);
                 setMapData(res.data);
                 setMapError(null);
@@ -144,7 +145,7 @@ export default function ClusterScatterPlot({ targetCusNum, className, style }: C
             setIsDrawerLoading(true);
             setIsDrawerOpen(true);
             try {
-                const url = `http://localhost:8000/api/customers/${selectedCusNum}/mini-profile`;
+                const url = getApiBaseUrl(`/customers/${selectedCusNum}/mini-profile`);
                 const res = await axios.get<MiniProfileResponse>(url);
                 setMiniProfileData(res.data);
             } catch (err: any) {
@@ -311,7 +312,7 @@ export default function ClusterScatterPlot({ targetCusNum, className, style }: C
                 marker: { color: '#A855F7', size: 12, symbol: 'diamond', line: { width: 1.5, color: 'white' } },
                 text: [`${dec.name} (Declared)`], textposition: "bottom center",
                 textfont: { family: "Inter", size: 10, color: "#C084FC" },
-                hoverinfo: 'text', text: [`Declared Sector Centroid: ${dec.name}`]
+                hoverinfo: 'text', hovertext: [`Declared Sector Centroid: ${dec.name}`]
             });
         }
 

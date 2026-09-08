@@ -1,8 +1,12 @@
 import axios from "axios";
 import { TriagePayload } from "@/types/triage";
+import { getApiBaseUrl } from "./apiConfig";
 
-const api = axios.create({
-    baseURL: "http://localhost:8000/api/alerts",
+const api = axios.create();
+
+api.interceptors.request.use((config) => {
+    config.baseURL = getApiBaseUrl("/api/alerts");
+    return config;
 });
 
 export const getTriageQueue = async (
