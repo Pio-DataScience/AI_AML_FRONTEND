@@ -2,13 +2,13 @@
 
 import React, { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
-import { Card, CardBody, Input, Button, Chip, Switch, Autocomplete, AutocompleteItem, Kbd, DatePicker } from "@heroui/react";
+import { Card, CardBody, Input, Button, Chip, Autocomplete, AutocompleteItem, Kbd, DatePicker } from "@heroui/react";
 import { useTheme } from "next-themes";
 import { parseDate, getLocalTimeZone } from "@internationalized/date";
 
 export default function RootCommandCenter() {
     const router = useRouter();
-    const { theme, setTheme } = useTheme();
+    const { theme } = useTheme();
     const [mounted, setMounted] = useState(false);
 
     // Global Context State defaults
@@ -190,19 +190,7 @@ export default function RootCommandCenter() {
                         />
                     </div>
 
-                    <div className="h-5 w-[1.5px] bg-slate-400/50 dark:bg-white/20 mx-2" />
-
-                    <Switch
-                        size="sm"
-                        color="primary"
-                        isSelected={isDark}
-                        onValueChange={(val) => setTheme(val ? "dark" : "light")}
-                        classNames={{
-                            label: "text-xs font-bold uppercase tracking-widest text-slate-500"
-                        }}
-                    >
-                        Night Mode
-                    </Switch>
+                    <div className="h-5 w-[1.5px] bg-slate-400/50 mx-2" />
                 </div>
             </div>
 

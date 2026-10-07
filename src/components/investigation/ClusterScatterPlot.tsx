@@ -126,7 +126,7 @@ export default function ClusterScatterPlot({ targetCusNum, className, style }: C
             if (!targetCusNum || targetCusNum === "DEFAULT") return;
             setIsMapLoading(true);
             try {
-                const url = getApiBaseUrl(`/viz/clusters?target_cus_num=${targetCusNum}`);
+                const url = getApiBaseUrl(`/api/viz/clusters?target_cus_num=${targetCusNum}`);
                 const res = await axios.get<ClusterResponse>(url);
                 setMapData(res.data);
                 setMapError(null);
@@ -145,7 +145,7 @@ export default function ClusterScatterPlot({ targetCusNum, className, style }: C
             setIsDrawerLoading(true);
             setIsDrawerOpen(true);
             try {
-                const url = getApiBaseUrl(`/customers/${selectedCusNum}/mini-profile`);
+                const url = getApiBaseUrl(`/api/customers/${selectedCusNum}/mini-profile`);
                 const res = await axios.get<MiniProfileResponse>(url);
                 setMiniProfileData(res.data);
             } catch (err: any) {

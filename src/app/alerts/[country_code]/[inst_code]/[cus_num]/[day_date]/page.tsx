@@ -7,6 +7,7 @@ import Plot from "@/components/PlotlyWrapper";
 import { useAlert } from "@/hooks/useAlert";
 import MarkdownRenderer from "@/components/MarkdownRenderer";
 import { MacroPayload, MicroPayload, NetworkGraphData } from "@/types/alert";
+import { CustomerMiniProfileResponse } from "@/types/customer";
 import { getTransactionHistory } from "@/services/alertService";
 import Customer360Glance from "@/components/Customer360Glance";
 import dynamic from "next/dynamic";
@@ -30,7 +31,7 @@ function useCockpitTheme() {
     const { resolvedTheme } = useTheme();
     const [mounted, setMounted] = useState(false);
     useEffect(() => setMounted(true), []);
-    const isDark = mounted ? resolvedTheme === "dark" : true;
+    const isDark = mounted ? resolvedTheme === "dark" : false;
 
     return {
         isDark,
@@ -181,6 +182,157 @@ function MacroContextZone({ macroData, cus_num, day_date, isLoading, isGeneratin
     );
 }
 
+// ── No-Alert Zone (customer exists, but has no AML alert) ────────────────────
+function formatUSD(val?: number | null) {
+    return new Intl.NumberFormat("en-US", {
+        style: "currency",
+        currency: "USD",
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 0,
+    }).format(val || 0);
+}
+
+function NoAlertContextZone({ profile, cusNum, countryCode, instCode, dayDate, microError, t }: {
+    profile: CustomerMiniProfileResponse | null;
+    cusNum: string;
+    countryCode: string;
+    instCode: string;
+    dayDate: string;
+    microError: string | null;
+    t: ReturnType<typeof useCockpitTheme>;
+}) {
+    const cp = profile?.customer_profile;
+    const risk = (cp?.risk_rating || "").toUpperCase();
+    const riskColor = risk === "HIGH" ? "#F43F5E" : risk === "MEDIUM" ? "#F59E0B" : risk === "LOW" ? "#10B981" : t.textMuted;
+    const ageYears = cp && cp.account_age_days ? Math.floor(cp.account_age_days / 365) : null;
+
+    const facts: { label: string; value: string; accent?: string }[] = [
+        { label: "Customer ID", value: cp?.cus_num || cusNum },
+        { label: "Customer Name", value: cp?.name || "—" },
+        { label: "Risk Level", value: cp?.risk_rating || "—", accent: riskColor },
+        { label: "Country", value: cp?.country_code || countryCode },
+        { label: "Customer Class", value: cp?.customer_class || "—" },
+        { label: "Sector", value: cp?.sector || "—" },
+        { label: "Monthly Income (Stated)", value: cp ? formatUSD(cp.monthly_expected_income) : "—" },
+        { label: "Account Age", value: ageYears !== null ? `${ageYears} years (${cp?.account_age_days} days)` : "—" },
+        { label: "Assigned Cluster", value: cp?.assigned_cluster || "Unassigned" },
+        { label: "Anomaly Probability", value: cp ? `${(cp.anomaly_probability * 100).toFixed(1)}%` : "—" },
+    ];
+
+    const emptyStates = [
+        { label: "AML Alert", value: "No AML alert available" },
+        { label: "Suspicious Reasons", value: "No suspicious reasons detected" },
+        { label: "AI Alert Narrative", value: "No alert narrative available" },
+    ];
+
+    const transactions = profile?.recent_transactions || [];
+
+    return (
+        <section className="mb-8 flex flex-col gap-6">
+            {/* Status Banner */}
+            <Panel t={t} style={{
+                padding: "1.25rem 1.5rem",
+                border: "1px solid rgba(16,185,129,0.35)",
+                background: t.isDark
+                    ? "linear-gradient(90deg, rgba(16,185,129,0.12), rgba(16,185,129,0.02))"
+                    : "linear-gradient(90deg, rgba(16,185,129,0.10), rgba(16,185,129,0.02))",
+            }}>
+                <div className="flex items-start gap-4">
+                    <div className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
+                        style={{ background: "#10B98120", boxShadow: "0 0 0 1px #10B98140" }}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#10B981" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M20 6L9 17l-5-5" />
+                        </svg>
+                    </div>
+                    <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-2">
+                            <h2 className="text-base font-black tracking-tight" style={{ color: "#10B981" }}>No suspicious activity detected</h2>
+                            <span className="text-[9px] font-black uppercase tracking-[0.15em] px-2 py-0.5 rounded-full"
+                                style={{ background: "#10B98115", color: "#10B981", boxShadow: "0 0 0 1px #10B98130" }}>
+                                Not Flagged
+                            </span>
+                        </div>
+                        <p className="text-xs mt-1" style={{ color: t.textSecondary }}>
+                            This customer is not currently flagged as suspicious. No AML alert exists for <code>{cusNum}</code> on {dayDate} (country {countryCode} · inst {instCode}).
+                        </p>
+                    </div>
+                </div>
+            </Panel>
+
+            {/* Customer Profile */}
+            <div>
+                <SectionHeader label="Customer Profile" badge="CUSTOMER 360" t={t} />
+                <Panel t={t} style={{ padding: "1.25rem" }}>
+                    <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-3">
+                        {facts.map(f => (
+                            <div key={f.label} className="flex flex-col gap-1 p-3 rounded-xl"
+                                style={{ background: t.isDark ? "rgba(255,255,255,0.03)" : "rgba(10,15,30,0.02)", border: `1px solid ${t.rowBorderBase}` }}>
+                                <span className="text-[9px] font-black uppercase tracking-[0.15em]" style={{ color: t.textMuted, fontFamily: t.fontMono }}>{f.label}</span>
+                                <span className="text-sm font-bold truncate" style={{ color: f.accent || t.textPrimary }} title={f.value}>{f.value}</span>
+                            </div>
+                        ))}
+                    </div>
+                </Panel>
+            </div>
+
+            {/* Alert-Dependent Data — clean empty states */}
+            <div>
+                <SectionHeader label="Alert-Dependent Data" badge="NO ALERT" t={t} />
+                <Panel t={t} style={{ padding: "1.25rem" }}>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+                        {emptyStates.map(item => (
+                            <div key={item.label} className="p-4 rounded-xl" style={{ border: `1px dashed ${t.cardBorder}`, background: t.cardFill }}>
+                                <span className="text-[9px] font-black uppercase tracking-[0.15em] block mb-2" style={{ color: t.textMuted, fontFamily: t.fontMono }}>{item.label}</span>
+                                <p className="text-xs font-bold" style={{ color: t.textSecondary }}>{item.value}</p>
+                            </div>
+                        ))}
+                    </div>
+                </Panel>
+            </div>
+
+            {/* Recent Transactions (mini-profile ledger) */}
+            <div>
+                <SectionHeader label="Recent Transactions" badge="MINI-PROFILE LEDGER" t={t} />
+                <Panel t={t} style={{ padding: "1.25rem" }}>
+                    {transactions.length > 0 ? (
+                        <div className="overflow-hidden rounded-xl" style={{ border: `1px solid ${t.rowBorderBase}` }}>
+                            <div className="grid grid-cols-12 px-4 py-2.5 text-[9px] font-black uppercase tracking-[0.15em]"
+                                style={{ background: t.headerBg, color: t.textMuted, fontFamily: t.fontMono, borderBottom: `1px solid ${t.rowBorderBase}` }}>
+                                <span className="col-span-4">Date</span>
+                                <span className="col-span-2">Direction</span>
+                                <span className="col-span-3">Counterparty</span>
+                                <span className="col-span-3 text-right">Amount</span>
+                            </div>
+                            {transactions.map((tx, i) => {
+                                const isDebit = (tx.direction || "").toUpperCase() === "DEBIT";
+                                return (
+                                    <div key={`${tx.date}-${i}`} className="grid grid-cols-12 px-4 py-3 items-center text-xs"
+                                        style={{ borderBottom: i < transactions.length - 1 ? `1px solid ${t.rowBorderBase}` : "none", fontFamily: t.fontMono, color: t.textSecondary }}>
+                                        <span className="col-span-4 truncate">{String(tx.date).split("T")[0]}</span>
+                                        <span className="col-span-2">
+                                            <span className="text-[9px] font-black px-2 py-0.5 rounded-full"
+                                                style={{ background: isDebit ? "#F43F5E15" : "#10B98115", color: isDebit ? "#F43F5E" : "#10B981", boxShadow: `0 0 0 1px ${isDebit ? "#F43F5E30" : "#10B98130"}` }}>
+                                                {tx.direction || "—"}
+                                            </span>
+                                        </span>
+                                        <span className="col-span-3 truncate" title={tx.counterparty || ""}>{tx.counterparty || "—"}</span>
+                                        <span className="col-span-3 text-right font-bold" style={{ color: t.textPrimary }}>{formatUSD(tx.amount)}</span>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    ) : (
+                        <div className="py-8 text-center">
+                            <p className="text-xs font-bold" style={{ color: t.textSecondary }}>No recent transactions on record.</p>
+                            {microError && <p className="text-[10px] mt-2" style={{ color: t.textTiny, fontFamily: t.fontMono }}>{microError}</p>}
+                        </div>
+                    )}
+                </Panel>
+            </div>
+        </section>
+    );
+}
+
 // ── Money Flow Sankey ─────────────────────────────────────────────────────────
 function MoneyFlowSankey({ microLedger, t }: { microLedger: MicroPayload[]; t: ReturnType<typeof useCockpitTheme> }) {
     if (!microLedger || microLedger.length === 0) return null;
@@ -251,9 +403,7 @@ function VisualEvidenceZone({ macroData, microLedger, history, selectedMicroData
     cus_num: string;
     t: ReturnType<typeof useCockpitTheme>;
 }) {
-    if (!macroData) return null;
-
-    const behavioral_context = macroData.behavioral_context || {};
+    const behavioral_context = macroData?.behavioral_context ?? ({} as MacroPayload["behavioral_context"]);
     let customer_metrics = behavioral_context.customer_metrics || {};
     let peer_cluster_profile = behavioral_context.peer_cluster_profile || {};
     if (Object.keys(customer_metrics).length === 0 && selectedMicroData?.transaction_context) {
@@ -293,6 +443,7 @@ function VisualEvidenceZone({ macroData, microLedger, history, selectedMicroData
 
     const validMicro = microLedger.filter(m => m.transaction_metadata);
     const sortedHistory = [...history].sort((a, b) => new Date(a.tra_date).getTime() - new Date(b.tra_date).getTime());
+    const hasTimelineData = sortedHistory.length > 0 || validMicro.length > 0;
 
     return (
         <section className="mb-8">
@@ -335,6 +486,7 @@ function VisualEvidenceZone({ macroData, microLedger, history, selectedMicroData
                         </div>
                     </div>
                     <div style={{ width: "100%", height: 320 }}>
+                        {hasTimelineData ? (
                         <Plot
                             data={[
                                 {
@@ -435,6 +587,11 @@ function VisualEvidenceZone({ macroData, microLedger, history, selectedMicroData
                             }}
                             useResizeHandler style={{ width: "100%", height: "100%" }}
                         />
+                        ) : (
+                            <div className="flex h-full items-center justify-center">
+                                <p style={{ color: "#64748B", fontFamily: t.fontMono, fontSize: 12 }}>No transaction history available for this customer.</p>
+                            </div>
+                        )}
                     </div>
                 </Panel>
 
@@ -474,11 +631,30 @@ function VisualEvidenceZone({ macroData, microLedger, history, selectedMicroData
 
 // ── Network Zone ──────────────────────────────────────────────────────────────
 function NetworkSyndicateZone({ data, isLoading, t }: { data: NetworkGraphData | null; isLoading: boolean; t: ReturnType<typeof useCockpitTheme> }) {
+    const hasGraph = !!data && (data.nodes?.length || 0) > 0;
     return (
         <section className="mb-8">
             <SectionHeader label="Network Syndicate Graph" badge="NEO4J SUBGRAPH" t={t} />
             <div style={{ height: 600, width: "100%" }}>
-                <NetworkGraphViewer data={data} isLoading={isLoading} />
+                {!isLoading && !hasGraph ? (
+                    <Panel t={t} style={{
+                        height: "100%",
+                        display: "flex",
+                        flexDirection: "column",
+                        alignItems: "center",
+                        justifyContent: "center",
+                        gap: 8,
+                        textAlign: "center",
+                        padding: "2rem",
+                    }}>
+                        <p className="text-sm font-bold" style={{ color: t.textSecondary }}>No network data available</p>
+                        <p style={{ color: t.textMuted, fontFamily: t.fontMono, fontSize: 11 }}>
+                            No linked accounts or counterparties were found for this customer.
+                        </p>
+                    </Panel>
+                ) : (
+                    <NetworkGraphViewer data={data} isLoading={isLoading} />
+                )}
             </div>
             <p className="mt-2 px-2 text-[10px] italic" style={{ color: t.textTiny, fontFamily: t.fontMono }}>
                 4-hop traversal identifies Shared Devices, Proximate Accounts, and Indirect Money Trails.
@@ -488,7 +664,7 @@ function NetworkSyndicateZone({ data, isLoading, t }: { data: NetworkGraphData |
 }
 
 // ── Micro Ledger Zone ─────────────────────────────────────────────────────────
-function MicroLedgerZone({ microLedger, validMicroLedger, selectedMicroData, isGeneratingMicro, triggerMicroNarrative, selectedKeys, setSelectedKeys, tableRef, t }: {
+function MicroLedgerZone({ microLedger, validMicroLedger, selectedMicroData, isGeneratingMicro, triggerMicroNarrative, selectedKeys, setSelectedKeys, tableRef, noAlert, microError, t }: {
     microLedger: MicroPayload[]; validMicroLedger: MicroPayload[];
     selectedMicroData?: MicroPayload | null;
     isGeneratingMicro: Record<string, boolean>;
@@ -496,6 +672,8 @@ function MicroLedgerZone({ microLedger, validMicroLedger, selectedMicroData, isG
     selectedKeys: Set<string>;
     setSelectedKeys: (keys: Set<string>) => void;
     tableRef: React.RefObject<HTMLDivElement | null>;
+    noAlert: boolean;
+    microError: string | null;
     t: ReturnType<typeof useCockpitTheme>;
 }) {
     return (
@@ -516,8 +694,15 @@ function MicroLedgerZone({ microLedger, validMicroLedger, selectedMicroData, isG
                     {/* Rows */}
                     <div style={{ border: `1px solid ${t.panelBorder}`, borderTop: "none", borderRadius: "0 0 16px 16px", overflow: "hidden" }}>
                         {validMicroLedger.length === 0 ? (
-                            <div className="flex items-center justify-center py-16" style={{ background: t.cardFill }}>
-                                <p style={{ color: t.textMuted, fontFamily: t.fontMono, fontSize: 12 }}>No transactions found.</p>
+                            <div className="flex flex-col items-center justify-center py-16 gap-2 text-center px-6" style={{ background: t.cardFill }}>
+                                <p style={{ color: t.textSecondary, fontFamily: t.fontMono, fontSize: 12, fontWeight: 700 }}>
+                                    {noAlert ? "No AML alert available" : microError ? "Transaction data unavailable" : "No transactions found."}
+                                </p>
+                                {(noAlert || microError) && (
+                                    <p style={{ color: t.textTiny, fontFamily: t.fontMono, fontSize: 11 }}>
+                                        {noAlert ? "No suspicious transactions were flagged for this customer." : microError}
+                                    </p>
+                                )}
                             </div>
                         ) : validMicroLedger.map((item, idx) => {
                             const isSelected = selectedKeys.has(item.id);
@@ -661,10 +846,10 @@ function MicroLedgerZone({ microLedger, validMicroLedger, selectedMicroData, isG
 export default function AlertCockpitPage() {
     return (
         <Suspense fallback={
-            <div style={{ minHeight: "100vh", background: "#060B13", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <div style={{ minHeight: "100vh", background: "#EEF2F7", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 16 }}>
-                    <div style={{ width: 32, height: 32, border: "2px solid #38BDF8", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
-                    <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: "rgba(56,189,248,0.5)", textTransform: "uppercase", letterSpacing: "0.2em" }}>Initializing Cockpit...</span>
+                    <div style={{ width: 32, height: 32, border: "2px solid #0EA5E9", borderTopColor: "transparent", borderRadius: "50%", animation: "spin 0.8s linear infinite" }} />
+                    <span style={{ fontFamily: "'IBM Plex Mono', monospace", fontSize: 10, color: "#64748B", textTransform: "uppercase", letterSpacing: "0.2em" }}>Initializing Cockpit...</span>
                 </div>
             </div>
         }>
@@ -694,7 +879,7 @@ function AlertCockpitContent() {
         getTransactionHistory(country_code, inst_code, cus_num).then(setHistory).catch(console.error);
     }, [country_code, inst_code, cus_num]);
 
-    const { macroData, microLedger, networkData, isLoading, isNetworkLoading, error, isGeneratingMacro, isGeneratingMicro, triggerAiNarrative, triggerMicroNarrative } = useAlert(country_code, inst_code, cus_num, day_date, tra_seq1, tra_seq2);
+    const { macroData, microLedger, networkData, customerProfile, isLoading, isNetworkLoading, error, microError, noAlert, customerNotFound, isGeneratingMacro, isGeneratingMicro, triggerAiNarrative, triggerMicroNarrative } = useAlert(country_code, inst_code, cus_num, day_date, tra_seq1, tra_seq2);
 
     const handleTransactionClick = (id: string) => {
         setSelectedKeys(new Set([id]));
@@ -705,10 +890,29 @@ function AlertCockpitContent() {
     const selectedMicroData = validMicroLedger.find(m => selectedKeys.has(m.id));
 
     if (error) return (
-        <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: t.bg }}>
-            <div style={{ padding: 32, borderRadius: 16, border: "1px solid #F43F5E30", background: "#F43F5E08", textAlign: "center", maxWidth: 400 }}>
-                <p style={{ color: "#F43F5E", fontWeight: 800, marginBottom: 8 }}>Connection Error</p>
+        <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: t.bg, fontFamily: t.fontSans }}>
+            <div style={{ padding: 32, borderRadius: 16, border: "1px solid #F43F5E30", background: "#F43F5E08", textAlign: "center", maxWidth: 440 }}>
+                <p style={{ color: "#F43F5E", fontWeight: 800, marginBottom: 8 }}>Unable to Load Alert Data</p>
                 <p style={{ color: t.textMuted, fontSize: 13 }}>{error}</p>
+                <p style={{ color: t.textTiny, fontSize: 10, marginTop: 12, fontFamily: t.fontMono }}>Customer {cus_num} · {day_date}</p>
+            </div>
+        </div>
+    );
+
+    // The customer itself does not exist (no profile anywhere) — distinct from
+    // "exists but not suspicious", and distinct from a backend failure.
+    if (customerNotFound) return (
+        <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: t.bg, fontFamily: t.fontSans }}>
+            <div style={{ padding: 32, borderRadius: 16, border: `1px solid ${t.cardBorder}`, background: t.cardFill, textAlign: "center", maxWidth: 460 }}>
+                <div style={{ width: 48, height: 48, borderRadius: "50%", margin: "0 auto 14px", display: "flex", alignItems: "center", justifyContent: "center", background: "#F59E0B15", boxShadow: "0 0 0 1px #F59E0B30" }}>
+                    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#F59E0B" strokeWidth="2" strokeLinecap="round">
+                        <circle cx="11" cy="11" r="8" /><path d="M21 21l-4.35-4.35" />
+                    </svg>
+                </div>
+                <p style={{ color: t.textPrimary, fontWeight: 800, marginBottom: 8 }}>Customer Not Found</p>
+                <p style={{ color: t.textMuted, fontSize: 13 }}>
+                    No customer profile exists for <code style={{ color: "#F59E0B" }}>{cus_num}</code> under country <code>{country_code}</code> / institution <code>{inst_code}</code>. Check the customer ID and try again.
+                </p>
             </div>
         </div>
     );
@@ -743,13 +947,31 @@ function AlertCockpitContent() {
                         <span style={{ color: t.textTiny, fontFamily: t.fontMono, fontSize: 9 }}>|</span>
                         <span style={{ fontFamily: t.fontMono, fontSize: 10, color: t.textMuted }}>{day_date}</span>
                     </div>
+                    {noAlert && (
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 10px", borderRadius: 999, background: "#10B98115", boxShadow: "0 0 0 1px #10B98130" }}>
+                            <div style={{ width: 5, height: 5, borderRadius: "50%", background: "#10B981" }} />
+                            <span style={{ fontFamily: t.fontMono, fontSize: 9, fontWeight: 800, letterSpacing: "0.08em", color: "#10B981" }}>NO AML ALERT</span>
+                        </div>
+                    )}
                     <div style={{ width: 6, height: 6, borderRadius: "50%", background: "#10B981", boxShadow: "0 0 8px #10B981" }} className="animate-pulse" />
                 </div>
             </header>
 
             {/* Main Content */}
             <main style={{ position: "relative", zIndex: 1, maxWidth: 1440, margin: "0 auto", padding: "2rem 1.5rem 4rem" }}>
-                <MacroContextZone macroData={macroData} cus_num={cus_num} day_date={day_date} isLoading={isLoading} isGeneratingMacro={isGeneratingMacro} triggerAiNarrative={triggerAiNarrative} t={t} />
+                {noAlert ? (
+                    <NoAlertContextZone
+                        profile={customerProfile}
+                        cusNum={cus_num}
+                        countryCode={country_code}
+                        instCode={inst_code}
+                        dayDate={day_date}
+                        microError={microError}
+                        t={t}
+                    />
+                ) : (
+                    <MacroContextZone macroData={macroData} cus_num={cus_num} day_date={day_date} isLoading={isLoading} isGeneratingMacro={isGeneratingMacro} triggerAiNarrative={triggerAiNarrative} t={t} />
+                )}
 
                 {!isLoading && <VisualEvidenceZone macroData={macroData} microLedger={microLedger} history={history} selectedMicroData={selectedMicroData} onTransactionClick={handleTransactionClick} cus_num={cus_num} t={t} />}
 
@@ -757,7 +979,7 @@ function AlertCockpitContent() {
 
                 {!isLoading && (
                     <div ref={tableRef}>
-                        <MicroLedgerZone microLedger={microLedger} validMicroLedger={validMicroLedger} selectedMicroData={selectedMicroData} isGeneratingMicro={isGeneratingMicro} triggerMicroNarrative={triggerMicroNarrative} selectedKeys={selectedKeys} setSelectedKeys={setSelectedKeys} tableRef={tableRef} t={t} />
+                        <MicroLedgerZone microLedger={microLedger} validMicroLedger={validMicroLedger} selectedMicroData={selectedMicroData} isGeneratingMicro={isGeneratingMicro} triggerMicroNarrative={triggerMicroNarrative} selectedKeys={selectedKeys} setSelectedKeys={setSelectedKeys} tableRef={tableRef} noAlert={noAlert} microError={microError} t={t} />
                     </div>
                 )}
             </main>

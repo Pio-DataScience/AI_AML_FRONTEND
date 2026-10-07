@@ -14,7 +14,7 @@ export const getMacroAlert = async (
     inst_code: string,
     cus_num: string,
     day_date: string
-): Promise<MacroPayload> => {
+): Promise<MacroPayload | null> => {
     try {
         const response = await api.get<any>(
             `/alerts/${country_code}/${inst_code}/${cus_num}/${day_date}`
@@ -54,6 +54,18 @@ export const getMacroAlert = async (
 
         return rawPayload as MacroPayload;
     } catch (error) {
+        if (axios.isAxiosError(error) && error.response?.status === 404) {
+            // A 404 from this endpoint means "this customer has no AML alert
+            // record" — a valid business state, not a failure. Return null so
+            // the caller can render the "Not Suspicious / No Alert" cockpit.
+            // Guard against generic 404s (e.g. endpoint not deployed) by
+            // requiring the backend's explicit business message.
+            const detail = (error.response.data as { detail?: unknown } | undefined)?.detail;
+            if (typeof detail === "string" && detail.toLowerCase().includes("customer alert not found")) {
+                console.info(`No AML alert found for CUS_NUM=${cus_num} on ${day_date}.`);
+                return null;
+            }
+        }
         console.error(`Failed to fetch macro alert for ${cus_num}:`, error);
         throw error;
     }

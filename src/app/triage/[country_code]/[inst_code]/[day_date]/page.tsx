@@ -18,7 +18,7 @@ function useTriageTheme() {
   const { resolvedTheme } = useTheme();
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
-  const isDark = mounted ? (resolvedTheme === "dark") : true;
+  const isDark = mounted ? (resolvedTheme === "dark") : false;
 
   return {
     isDark,
@@ -547,10 +547,10 @@ function TriageContent() {
 export default function TriagePage() {
   return (
     <Suspense fallback={
-      <div className="h-screen flex items-center justify-center" style={{ background: "#060B13" }}>
+      <div className="h-screen flex items-center justify-center" style={{ background: "#EEF2F7" }}>
         <div className="flex flex-col items-center gap-4">
           <div className="w-8 h-8 border-2 border-indigo-500 border-t-transparent rounded-full animate-spin" />
-          <span className="text-[10px] font-mono text-white/20 uppercase tracking-widest">Initializing Triage Engine...</span>
+          <span className="text-[10px] font-mono text-slate-500 uppercase tracking-widest">Initializing Triage Engine...</span>
         </div>
       </div>
     }>
