@@ -64,6 +64,8 @@ export default function Customer360Glance({ rawJson }: Customer360GlanceProps) {
 
     const isHighRiskRating = risk.overall_risk?.toUpperCase() === "HIGH";
     const isHighRiskJurisdiction = HIGH_RISK_ISOS.includes(risk.jurisdiction?.toUpperCase());
+    const calculatedRisk = risk.calculated_risk?.toUpperCase();
+    const calculatedRiskColor = calculatedRisk === "HIGH" ? "danger" : calculatedRisk === "MID" ? "warning" : calculatedRisk === "LOW" ? "success" : "default";
 
     return (
         <Card 
@@ -73,15 +75,28 @@ export default function Customer360Glance({ rawJson }: Customer360GlanceProps) {
             <CardBody className="p-4 flex flex-col md:flex-row items-center gap-6 overflow-hidden">
                 
                 {/* 1. Overall Risk Badge (The Anchor) */}
-                <div className="flex flex-col items-center justify-center border-r border-slate-200/50 pr-6 min-w-[140px]">
-                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Risk Profile</span>
+                <div className="flex flex-col items-center justify-center gap-3 border-r border-slate-200/50 pr-6 min-w-[170px]">
+                    <div className="flex flex-col items-center">
+                    <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">KYC Risk</span>
                     <Chip
                         variant="shadow"
-                        color={isHighRiskRating ? "danger" : risk.overall_risk?.toUpperCase() === "MEDIUM" ? "warning" : "success"}
+                        color={isHighRiskRating ? "danger" : risk.overall_risk?.toUpperCase() === "MEDIUM" ? "warning" : risk.overall_risk ? "success" : "default"}
                         className={`font-black text-sm px-4 py-1 h-8 ${isHighRiskRating ? 'animate-pulse-subtle' : ''}`}
                     >
-                        {risk.overall_risk || "N/A"}
+                        {risk.overall_risk || "Unavailable"}
                     </Chip>
+                    </div>
+                    <div className="flex flex-col items-center">
+                        <span className="text-[10px] font-bold uppercase tracking-widest text-slate-400 mb-1">Calculated AML Risk</span>
+                        <Chip variant="shadow" color={calculatedRiskColor} className="font-black text-sm px-4 py-1 h-8">
+                            {risk.calculated_risk || "Unavailable"}
+                        </Chip>
+                        {risk.calculated_percentage != null && (
+                            <span className="mt-1 text-[10px] font-mono text-slate-500">
+                                RBA score {risk.calculated_percentage.toFixed(1)}%
+                            </span>
+                        )}
+                    </div>
                 </div>
 
                 {/* Profile Grid (Identity, Jurisdiction, Behavioral, Financial) */}

@@ -686,7 +686,7 @@ function MicroLedgerZone({ microLedger, validMicroLedger, selectedMicroData, isG
                     {/* Column headers */}
                     <div className="flex items-center gap-4 px-5 py-2.5" style={{ background: t.headerBg, borderBottom: `1px solid ${t.rowBorderBase}`, borderRadius: "16px 16px 0 0", border: `1px solid ${t.panelBorder}`, borderBottomWidth: 0 }}>
                         <span className="text-[9px] font-black uppercase tracking-[0.15em] flex-1" style={{ color: t.textMuted, fontFamily: t.fontMono }}>Date</span>
-                        <span className="text-[9px] font-black uppercase tracking-[0.15em] w-20" style={{ color: t.textMuted, fontFamily: t.fontMono }}>Type</span>
+                        <span className="text-[9px] font-black uppercase tracking-[0.15em] w-20" style={{ color: t.textMuted, fontFamily: t.fontMono }}>Direction</span>
                         <span className="text-[9px] font-black uppercase tracking-[0.15em] w-32 text-right" style={{ color: t.textMuted, fontFamily: t.fontMono }}>Amount</span>
                         <span className="text-[9px] font-black uppercase tracking-[0.15em] w-24 text-right" style={{ color: t.textMuted, fontFamily: t.fontMono }}>Severity</span>
                     </div>

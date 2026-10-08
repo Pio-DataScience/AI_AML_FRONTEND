@@ -9,6 +9,11 @@ export interface CustomerProfile {
         overall_risk: "HIGH" | "MEDIUM" | "LOW" | string;
         jurisdiction: string;
         customer_class: string;
+        calculated_risk?: "High" | "Mid" | "Low" | string | null;
+        calculated_score?: number | null;
+        calculated_percentage?: number | null;
+        calculated_weight?: number | null;
+        calculated_risk_flag?: string | null;
     };
     financial_baseline_30d: {
         stated_monthly_income: number;
@@ -23,7 +28,7 @@ export interface MacroPayload {
     customer_number: string;
     customer_360_snapshot?: string | CustomerProfile; // Allow both raw string and parsed object
     alert_metadata: {
-        risk_rating: "High" | "Medium" | "Low";
+        risk_rating: "High" | "Medium" | "Low" | "Unknown";
         snapshot_date: string;
         ai_generated_narrative: string | null;
     };

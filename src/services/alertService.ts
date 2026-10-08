@@ -9,6 +9,27 @@ api.interceptors.request.use((config) => {
     return config;
 });
 
+export const getLatestAlertDate = async (
+    country_code: string,
+    inst_code: string,
+    cus_num: string
+): Promise<string | null> => {
+    try {
+        const response = await api.get<{ day_date: string }>(
+            `/alerts/${country_code}/${inst_code}/${cus_num}/latest-date`
+        );
+        return response.data.day_date;
+    } catch (error) {
+        if (axios.isAxiosError(error) && error.response?.status === 404) {
+            const detail = (error.response.data as { detail?: unknown } | undefined)?.detail;
+            if (typeof detail === "string" && detail.toLowerCase().includes("customer alert not found")) {
+                return null;
+            }
+        }
+        throw error;
+    }
+};
+
 export const getMacroAlert = async (
     country_code: string,
     inst_code: string,
@@ -26,7 +47,25 @@ export const getMacroAlert = async (
         console.groupEnd();
 
         const data = response.data;
-        let rawPayload = data.AI_MACRO_PAYLOAD || data.ai_macro_payload || data;
+        const storedPayload = data.AI_MACRO_PAYLOAD || data.ai_macro_payload;
+        let rawPayload = storedPayload;
+
+        if (!rawPayload) {
+            return {
+                customer_number: cus_num,
+                customer_360_snapshot: undefined,
+                alert_metadata: {
+                    risk_rating: "Unknown",
+                    snapshot_date: day_date,
+                    ai_generated_narrative: data.AI_GENERATED_NARRATIVE || data.ai_generated_narrative || null,
+                },
+                primary_anomaly_drivers: [],
+                behavioral_context: {
+                    customer_metrics: {},
+                    peer_cluster_profile: {},
+                },
+            };
+        }
 
         // Handle cases where Oracle returns JSON as a string
         if (typeof rawPayload === 'string' && (rawPayload.trim().startsWith('{') || rawPayload.trim().startsWith('['))) {
@@ -50,6 +89,14 @@ export const getMacroAlert = async (
             if (bcKey && bcKey !== 'behavioral_context') {
                 (rawPayload as any).behavioral_context = (rawPayload as any)[bcKey];
             }
+            (rawPayload as any).alert_metadata = {
+                ...(rawPayload as any).alert_metadata,
+                ai_generated_narrative:
+                    (rawPayload as any).alert_metadata?.ai_generated_narrative ??
+                    data.AI_GENERATED_NARRATIVE ??
+                    data.ai_generated_narrative ??
+                    null,
+            };
         }
 
         return rawPayload as MacroPayload;
@@ -125,8 +172,8 @@ export const getMicroLedger = async (
             const metaKey = payloadKeys.find(k => k.toLowerCase() === 'transaction_metadata') || 'transaction_metadata';
             const contextKey = payloadKeys.find(k => k.toLowerCase() === 'transaction_context') || 'transaction_context';
 
-            const meta = payload.transaction_metadata || {};
-            const context = payload.transaction_context || {};
+            const meta = payload[metaKey] || {};
+            const context = payload[contextKey] || {};
 
             // Format anomaly drivers if they exist in the micro payload
             let drivers = payload.local_anomaly_drivers || [];
@@ -134,10 +181,9 @@ export const getMicroLedger = async (
                 drivers = drivers.includes('\n') ? drivers.split('\n').map((d: string) => d.trim()).filter(Boolean) : [drivers];
             }
 
-            // MAPPING: NO FALLBACKS allowed to identify data gaps
-            const amountVal = row.EQU_TRA_AMT || meta.amount || null;
-            const dateStr = row.TRA_DATE || meta.date || null;
-            const typeStr = meta.type || meta.transaction_type || row.TRANSACTION_TYPE || null;
+            const amountVal = row.EQU_TRA_AMT ?? row.TRA_AMT ?? meta.amount ?? null;
+            const dateStr = row.TRA_DATE ?? meta.date ?? null;
+            const typeStr = meta.type ?? meta.transaction_type ?? row.TRANSACTION_TYPE ?? null;
 
             // Severity: Use confidence_score if available in micro payload
             const rawConfidence = row.CONFIDENCE_SCORE || meta.confidence_score || meta.severity_score || null;
@@ -163,11 +209,20 @@ export const getMicroLedger = async (
             return {
                 id: row.TRANSACTION_KEY || `${row.TRA_SEQ1}-${row.TRA_SEQ2}`,
                 transaction_metadata: {
-                    amount: typeof amountVal === 'string' ? parseFloat(amountVal.replace(/[^0-9.-]+/g, "")) : Number(amountVal),
+                    amount: amountVal == null
+                        ? null
+                        : typeof amountVal === 'string'
+                            ? parseFloat(amountVal.replace(/[^0-9.-]+/g, ""))
+                            : Number(amountVal),
                     severity_score: severity,
                     date: dateStr,
                     type: typeStr,
-                    ai_micro_narrative: payload.AI_MICRO_NARRATIVE || meta.ai_micro_narrative || null
+                    ai_micro_narrative:
+                        row.AI_MICRO_NARRATIVE ??
+                        row.ai_micro_narrative ??
+                        payload.AI_MICRO_NARRATIVE ??
+                        meta.ai_micro_narrative ??
+                        null
                 },
                 local_anomaly_drivers: drivers,
                 transaction_context: robustContext

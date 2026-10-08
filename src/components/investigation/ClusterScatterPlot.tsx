@@ -12,6 +12,7 @@ export interface UmapNode {
     cus_num: string;
     umap_x: number;
     umap_y: number;
+    cluster_num: number;
     cluster_name: string;
     anomaly_probability?: number;
     is_target?: boolean;
@@ -24,11 +25,24 @@ export interface DeclaredSector {
 }
 
 export interface ClusterResponse {
+    available: true;
+    message: null;
     target_node: UmapNode;
     peer_nodes: UmapNode[];
     global_nodes: UmapNode[];
     declared_sector?: DeclaredSector | null;
 }
+
+export interface UnavailableClusterResponse {
+    available: false;
+    message: string;
+    target_node: null;
+    peer_nodes: [];
+    global_nodes: [];
+    declared_sector: null;
+}
+
+type ClusterApiResponse = ClusterResponse | UnavailableClusterResponse;
 
 export interface RecentTransaction {
     id: string;
@@ -107,12 +121,18 @@ const CLUSTER_PALETTE = [
     "#06B6D4", // Cyan
     "#84CC16", // Lime Green
     "#F97316", // Vivid Orange
+    "#8B5CF6", // Violet
+    "#EAB308", // Yellow
+    "#14B8A6", // Teal
+    "#EF4444", // Red
+    "#3B82F6", // Blue
+    "#D946EF", // Fuchsia
 ];
 
 // --- Main Component ---
 
 export default function ClusterScatterPlot({ targetCusNum, className, style }: ClusterScatterPlotProps) {
-    const [mapData, setMapData] = useState<ClusterResponse | null>(null);
+    const [mapData, setMapData] = useState<ClusterApiResponse | null>(null);
     const [isMapLoading, setIsMapLoading] = useState<boolean>(true);
     const [mapError, setMapError] = useState<string | null>(null);
 
@@ -127,7 +147,7 @@ export default function ClusterScatterPlot({ targetCusNum, className, style }: C
             setIsMapLoading(true);
             try {
                 const url = getApiBaseUrl(`/api/viz/clusters?target_cus_num=${targetCusNum}`);
-                const res = await axios.get<ClusterResponse>(url);
+                const res = await axios.get<ClusterApiResponse>(url);
                 setMapData(res.data);
                 setMapError(null);
             } catch (err: any) {
@@ -202,7 +222,7 @@ export default function ClusterScatterPlot({ targetCusNum, className, style }: C
     }, []);
 
     const graphConfig = useMemo(() => {
-        if (!mapData) return null;
+        if (!mapData || !mapData.available) return null;
         const { global_nodes, peer_nodes, target_node } = mapData;
         
         // Compute peer centroid (origin ghost)
@@ -212,86 +232,71 @@ export default function ClusterScatterPlot({ targetCusNum, className, style }: C
         const hullPoints = getConvexHull(peer_nodes.map(n => ({ x: n.umap_x, y: n.umap_y })));
 
         // Group global nodes by cluster for distinct coloring
-        const clusterGroups: Record<string, { x: number[], y: number[], ids: string[] }> = {};
+        const clusterGroups: Record<string, { x: number[], y: number[], ids: string[], name: string }> = {};
         global_nodes.forEach(n => {
-            const cName = n.cluster_name || "Unknown Peer Group";
-            if (!clusterGroups[cName]) clusterGroups[cName] = { x: [], y: [], ids: [] };
-            clusterGroups[cName].x.push(n.umap_x);
-            clusterGroups[cName].y.push(n.umap_y);
-            clusterGroups[cName].ids.push(n.cus_num);
+            const clusterId = String(n.cluster_num);
+            if (!clusterGroups[clusterId]) {
+                clusterGroups[clusterId] = { x: [], y: [], ids: [], name: n.cluster_name || "Unknown" };
+            }
+            clusterGroups[clusterId].x.push(n.umap_x);
+            clusterGroups[clusterId].y.push(n.umap_y);
+            clusterGroups[clusterId].ids.push(n.cus_num);
         });
 
         const traces: any[] = [];
-        let colorIdx = 0;
 
         // Global clusters + Labels
-        Object.entries(clusterGroups).forEach(([cName, data]) => {
-            const color = CLUSTER_PALETTE[colorIdx % CLUSTER_PALETTE.length];
-            colorIdx++;
+        Object.entries(clusterGroups).forEach(([clusterId, data], colorIndex) => {
+            const color = CLUSTER_PALETTE[colorIndex];
+            const displayName = `Cluster ${clusterId}: ${data.name}`;
             
             // Nodes
             traces.push({
                 x: data.x, y: data.y, customdata: data.ids,
-                mode: 'markers', type: 'scatter', name: cName,
+                mode: 'markers', type: 'scatter', name: displayName,
                 marker: { color: color, size: 6, opacity: 0.55, line: { color: color, width: 0.5 } },
-                hoverinfo: 'text', text: data.ids.map(() => `Cluster: ${cName}`)
+                hoverinfo: 'text', text: data.ids.map(() => displayName)
             });
 
-            // Label at centroid
-            const cx = data.x.reduce((a, b) => a + b, 0) / data.x.length;
-            const cy = data.y.reduce((a, b) => a + b, 0) / data.y.length;
+            const centerX = data.x.reduce((sum, value) => sum + value, 0) / data.x.length;
+            const centerY = data.y.reduce((sum, value) => sum + value, 0) / data.y.length;
             traces.push({
-                x: [cx], y: [cy], mode: 'text', type: 'scatter',
-                text: [cName], textposition: "middle center",
-                textfont: { family: "Inter", size: 10, color: "rgba(255,255,255,0.65)" },
+                x: [centerX], y: [centerY], mode: 'text', type: 'scatter',
+                text: [`Cluster ${clusterId}`], textposition: "middle center",
+                textfont: { family: "Inter", size: 9, color: "rgba(255,255,255,0.65)" },
                 hoverinfo: 'skip', showlegend: false
             });
         });
 
-        // Peer convex hull
-        traces.push({
-            x: hullPoints.map(p => p.x), y: hullPoints.map(p => p.y),
-            mode: 'lines', type: 'scatter', name: 'Known Behavioral Space',
-            fill: 'toself', fillcolor: 'rgba(56, 189, 248, 0.05)',
-            line: { color: 'rgba(56, 189, 248, 0.4)', width: 1.5, dash: 'dash' },
-            hoverinfo: 'skip'
-        });
-
-        // Peer boundary label
-        traces.push({
-            x: [peerCenterX], y: [Math.min(...peer_nodes.map(n => n.umap_y)) - 1],
-            mode: 'text', type: 'scatter', text: ["Known Behavioral Space"],
-            textposition: "bottom center", textfont: { family: "Inter", size: 10, color: "#38BDF8" },
-            hoverinfo: 'skip', showlegend: false
-        });
-
-        // Peer nodes (Assigned Peers)
-        traces.push({
-            x: peer_nodes.map(n => n.umap_x), y: peer_nodes.map(n => n.umap_y),
-            customdata: peer_nodes.map(n => n.cus_num),
-            mode: 'markers', type: 'scatter', name: 'Assigned Peers',
-            marker: { color: '#38BDF8', size: 6, opacity: 0.8 },
-            hoverinfo: 'text', text: peer_nodes.map(() => "Assigned Peer")
-        });
-
-        // Behavioral Drift Path
-        traces.push({
-            x: [peerCenterX, target_node.umap_x], y: [peerCenterY, target_node.umap_y],
-            mode: 'lines', type: 'scatter', name: 'Behavioral Drift',
-            line: { color: '#FF3B5C', width: 2, dash: 'dot' },
-            hoverinfo: 'skip', showlegend: false
-        });
-
-        // Ghost marker (Origin)
-        traces.push({
-            x: [peerCenterX], y: [peerCenterY],
-            customdata: [target_node.cus_num],
-            mode: 'markers+text', type: 'scatter', showlegend: false,
-            marker: { color: 'rgba(255, 59, 92, 0.2)', size: 14, symbol: 'circle' },
-            text: ["Origin"], textposition: "top center",
-            textfont: { family: "Inter", size: 9, color: "rgba(255, 255, 255, 0.3)" },
-            hoverinfo: 'skip'
-        });
+        if (peer_nodes.length > 0) {
+            // Peer convex hull
+            traces.push({
+                x: hullPoints.map(p => p.x), y: hullPoints.map(p => p.y),
+                mode: 'lines', type: 'scatter', name: 'Known Behavioral Space',
+                fill: 'toself', fillcolor: 'rgba(56, 189, 248, 0.05)',
+                line: { color: 'rgba(56, 189, 248, 0.4)', width: 1.5, dash: 'dash' },
+                hoverinfo: 'skip'
+            });
+            traces.push({
+                x: [peerCenterX], y: [Math.min(...peer_nodes.map(n => n.umap_y)) - 1],
+                mode: 'text', type: 'scatter', text: ["Known Behavioral Space"],
+                textposition: "bottom center", textfont: { family: "Inter", size: 10, color: "#38BDF8" },
+                hoverinfo: 'skip', showlegend: false
+            });
+            traces.push({
+                x: peer_nodes.map(n => n.umap_x), y: peer_nodes.map(n => n.umap_y),
+                customdata: peer_nodes.map(n => n.cus_num),
+                mode: 'markers', type: 'scatter', name: 'Assigned Peers',
+                marker: { color: '#38BDF8', size: 6, opacity: 0.8 },
+                hoverinfo: 'text', text: peer_nodes.map(() => "Assigned Peer")
+            });
+            traces.push({
+                x: [peerCenterX, target_node.umap_x], y: [peerCenterY, target_node.umap_y],
+                mode: 'lines', type: 'scatter', name: 'Behavioral Drift',
+                line: { color: '#FF3B5C', width: 2, dash: 'dot' },
+                hoverinfo: 'skip', showlegend: false
+            });
+        }
 
         // Declared Sector Centroid
         if (mapData.declared_sector) {
@@ -341,13 +346,22 @@ export default function ClusterScatterPlot({ targetCusNum, className, style }: C
         </Card>
     );
 
+    if (!mapData.available) return (
+        <Card className="w-full h-full min-h-[500px] flex flex-col items-center justify-center bg-[#0B111B] border border-slate-800" shadow="none">
+            <p className="text-slate-300 font-mono text-xs uppercase tracking-widest">Cluster analysis unavailable</p>
+            <p className="mt-3 max-w-md text-center text-xs text-slate-500">{mapData.message}</p>
+        </Card>
+    );
+
     const peerCenterX = mapData.peer_nodes.length > 0 ? mapData.peer_nodes.reduce((sum, n) => sum + n.umap_x, 0) / mapData.peer_nodes.length : 0;
     const peerCenterY = mapData.peer_nodes.length > 0 ? mapData.peer_nodes.reduce((sum, n) => sum + n.umap_y, 0) / mapData.peer_nodes.length : 0;
     
     const prob = mapData.target_node.anomaly_probability || 0;
 
     // Calculate actual spatial isolation (Z-Score approximation)
-    let distanceScoreText = "0.0 standard deviations from centroid (Within peer standard deviation)";
+    let distanceScoreText = mapData.target_node.cluster_num === -1
+        ? "No peer centroid: model classified this account as unassigned noise"
+        : "Peer distance unavailable";
     let distanceZ = 0;
     if (mapData.peer_nodes.length > 0) {
         const distances = mapData.peer_nodes.map(n => Math.sqrt(Math.pow(n.umap_x - peerCenterX, 2) + Math.pow(n.umap_y - peerCenterY, 2)));
@@ -392,22 +406,6 @@ export default function ClusterScatterPlot({ targetCusNum, className, style }: C
         isMismatch = !cleanTgtCluster.includes(cleanDecSector) && !cleanDecSector.includes(cleanTgtCluster);
         
         if (isMismatch) {
-            // DEMO WORKAROUND: Shift the economic sector centroid coordinates 
-            // to align them with their actual visual cluster positions on the map.
-            if (cleanDecSector === "UNEMPLOYED") {
-                dec.umap_x = 10.0;
-                dec.umap_y = 10.0;
-            } else if (cleanDecSector === "CONSTRUCTION") {
-                dec.umap_x = -2.5;
-                dec.umap_y = 0.5;
-            } else if (cleanDecSector === "IT") {
-                dec.umap_x = 9.0;
-                dec.umap_y = 12.0;
-            } else if (cleanDecSector === "RETAIL") {
-                dec.umap_x = 5.0;
-                dec.umap_y = -2.0;
-            }
-            
             const dist = Math.sqrt(Math.pow(tgt.umap_x - dec.umap_x, 2) + Math.pow(tgt.umap_y - dec.umap_y, 2));
             // Adjust divisor to keep a solid high-risk percentage (~88%)
             mismatchScore = Math.min(Math.round((dist / 21) * 100), 100);
@@ -523,11 +521,11 @@ export default function ClusterScatterPlot({ targetCusNum, className, style }: C
                         showlegend: false, hovermode: 'closest', dragmode: 'pan',
                         xaxis: { 
                             showgrid: false, zeroline: false, showticklabels: false,
-                            title: { text: "← Aligned with Peer Baselines   |   Drifting into Unprecedented Behavior →", font: { size: 10, color: "#475569", family: "Inter" } }
+                            title: { text: "UMAP dimension 1", font: { size: 10, color: "#475569", family: "Inter" } }
                         },
                         yaxis: { 
                             showgrid: false, zeroline: false, showticklabels: false,
-                            title: { text: "← Standard transaction volume   |   High-Volatility Activity →", font: { size: 10, color: "#475569", family: "Inter" } }
+                            title: { text: "UMAP dimension 2", font: { size: 10, color: "#475569", family: "Inter" } }
                         }
                     } as any}
                     useResizeHandler

@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { Card, CardBody, Input, Button, Chip, Autocomplete, AutocompleteItem, Kbd, DatePicker } from "@heroui/react";
 import { useTheme } from "next-themes";
 import { parseDate, getLocalTimeZone } from "@internationalized/date";
+import { getLatestAlertDate } from "@/services/alertService";
 
 export default function RootCommandCenter() {
     const router = useRouter();
@@ -19,6 +20,8 @@ export default function RootCommandCenter() {
 
     // Omni-Search State
     const [searchCusNum, setSearchCusNum] = useState("");
+    const [isSearching, setIsSearching] = useState(false);
+    const [searchError, setSearchError] = useState<string | null>(null);
     const searchRef = useRef<HTMLInputElement>(null);
 
     // Mock Triage Stats
@@ -57,10 +60,22 @@ export default function RootCommandCenter() {
         return `${day}-${month}-${year}`;
     };
 
-    const handleOmniSearch = (e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === "Enter" && searchCusNum.trim() !== "") {
-            const formattedDate = formatBatchDate(batchDateObj);
-            router.push(`/alerts/${countryCode}/${instCode}/${searchCusNum.trim()}/${formattedDate}`);
+    const handleOmniSearch = async (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key !== "Enter" || searchCusNum.trim() === "" || isSearching) return;
+
+        e.preventDefault();
+        const cusNum = searchCusNum.trim();
+        setIsSearching(true);
+        setSearchError(null);
+
+        try {
+            const latestAlertDate = await getLatestAlertDate(countryCode, instCode, cusNum);
+            const targetDate = latestAlertDate || formatBatchDate(batchDateObj);
+            router.push(`/alerts/${countryCode}/${instCode}/${cusNum}/${targetDate}`);
+        } catch {
+            setSearchError("Unable to search customer records. Confirm that the AML API is running on port 8010.");
+        } finally {
+            setIsSearching(false);
         }
     };
 
@@ -221,8 +236,12 @@ export default function RootCommandCenter() {
                         size="lg"
                         placeholder="Search Customer ID (e.g., 100376) to launch Forensic Cockpit..."
                         value={searchCusNum}
-                        onChange={(e) => setSearchCusNum(e.target.value)}
+                        onChange={(e) => {
+                            setSearchCusNum(e.target.value);
+                            setSearchError(null);
+                        }}
                         onKeyDown={handleOmniSearch}
+                        isDisabled={isSearching}
                         classNames={{
                             input: `text-lg transition-colors ${isDark ? "text-slate-200 placeholder:text-slate-500" : "text-slate-900 placeholder:text-slate-400 font-medium"}`,
                             inputWrapper: `h-20 border transition-all backdrop-blur-xl shadow-2xl rounded-2xl px-6 !cursor-text ${isDark ? "bg-surface-1/90 border-white/10" : "bg-white border-slate-200"
@@ -237,11 +256,16 @@ export default function RootCommandCenter() {
                             <div className="flex items-center gap-2">
                                 <Kbd keys={["command"]}>K</Kbd>
                                 <Chip size="sm" variant="flat" className={isDark ? "bg-slate-800 text-slate-400 border-white/5 font-mono text-xs" : "bg-slate-100 text-slate-500 font-mono text-xs uppercase"}>
-                                    Enter ↵
+                                    {isSearching ? "Searching..." : "Enter ↵"}
                                 </Chip>
                             </div>
                         }
                     />
+                    {searchError && (
+                        <p className="absolute top-full left-3 mt-2 text-sm font-semibold text-rose-500">
+                            {searchError}
+                        </p>
+                    )}
                 </div>
 
                 {/* Action Launchpad Cards */}
