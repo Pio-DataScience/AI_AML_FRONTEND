@@ -202,21 +202,29 @@ function NoAlertContextZone({ profile, cusNum, countryCode, instCode, dayDate, m
     t: ReturnType<typeof useCockpitTheme>;
 }) {
     const cp = profile?.customer_profile;
-    const risk = (cp?.risk_rating || "").toUpperCase();
-    const riskColor = risk === "HIGH" ? "#F43F5E" : risk === "MEDIUM" ? "#F59E0B" : risk === "LOW" ? "#10B981" : t.textMuted;
+    const riskColor = (value?: string | null) => {
+        const risk = (value || "").toUpperCase();
+        return risk === "HIGH" ? "#F43F5E" : risk === "MEDIUM" || risk === "MID" ? "#F59E0B" : risk === "LOW" ? "#10B981" : t.textMuted;
+    };
     const ageYears = cp && cp.account_age_days ? Math.floor(cp.account_age_days / 365) : null;
+    const calculatedScore = cp?.calculated_percentage != null
+        ? `${cp.calculated_percentage.toFixed(1)}%${cp.calculated_score != null ? ` (score ${cp.calculated_score})` : ""}`
+        : "Unavailable";
 
     const facts: { label: string; value: string; accent?: string }[] = [
         { label: "Customer ID", value: cp?.cus_num || cusNum },
         { label: "Customer Name", value: cp?.name || "—" },
-        { label: "Risk Level", value: cp?.risk_rating || "—", accent: riskColor },
+        { label: "KYC Risk", value: cp?.kyc_risk || "Unavailable", accent: riskColor(cp?.kyc_risk) },
+        { label: "Calculated AML Risk", value: cp?.calculated_risk || "Unavailable", accent: riskColor(cp?.calculated_risk) },
+        { label: "RBA Score", value: calculatedScore, accent: riskColor(cp?.calculated_risk) },
+        { label: "RBA Assessment Date", value: cp?.calculated_risk_date?.split("T")[0] || "Unavailable" },
         { label: "Country", value: cp?.country_code || countryCode },
         { label: "Customer Class", value: cp?.customer_class || "—" },
         { label: "Sector", value: cp?.sector || "—" },
         { label: "Monthly Income (Stated)", value: cp ? formatUSD(cp.monthly_expected_income) : "—" },
         { label: "Account Age", value: ageYears !== null ? `${ageYears} years (${cp?.account_age_days} days)` : "—" },
         { label: "Assigned Cluster", value: cp?.assigned_cluster || "Unassigned" },
-        { label: "Anomaly Probability", value: cp ? `${(cp.anomaly_probability * 100).toFixed(1)}%` : "—" },
+        { label: "Behavioral Anomaly", value: cp ? `${(cp.anomaly_probability * 100).toFixed(1)}%` : "—" },
     ];
 
     const emptyStates = [
@@ -246,14 +254,14 @@ function NoAlertContextZone({ profile, cusNum, countryCode, instCode, dayDate, m
                     </div>
                     <div className="min-w-0">
                         <div className="flex flex-wrap items-center gap-2">
-                            <h2 className="text-base font-black tracking-tight" style={{ color: "#10B981" }}>No suspicious activity detected</h2>
+                            <h2 className="text-base font-black tracking-tight" style={{ color: "#10B981" }}>No AML alert detected</h2>
                             <span className="text-[9px] font-black uppercase tracking-[0.15em] px-2 py-0.5 rounded-full"
                                 style={{ background: "#10B98115", color: "#10B981", boxShadow: "0 0 0 1px #10B98130" }}>
                                 Not Flagged
                             </span>
                         </div>
                         <p className="text-xs mt-1" style={{ color: t.textSecondary }}>
-                            This customer is not currently flagged as suspicious. No AML alert exists for <code>{cusNum}</code> on {dayDate} (country {countryCode} · inst {instCode}).
+                            No transactional AML alert exists for <code>{cusNum}</code> on {dayDate} (country {countryCode} · inst {instCode}). KYC and calculated RBA risk remain independent of this alert status.
                         </p>
                     </div>
                 </div>

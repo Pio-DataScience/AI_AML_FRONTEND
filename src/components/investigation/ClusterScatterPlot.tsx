@@ -63,6 +63,11 @@ export interface MiniProfileResponse {
         name: string;
         sector: string;
         risk_rating: string;
+        kyc_risk?: string | null;
+        calculated_risk?: string | null;
+        calculated_score?: number | null;
+        calculated_percentage?: number | null;
+        calculated_weight?: number | null;
         account_age_days: number;
         assigned_cluster: string;
         anomaly_probability: number;
@@ -138,6 +143,7 @@ export default function ClusterScatterPlot({ targetCusNum, className, style }: C
 
     const [selectedCusNum, setSelectedCusNum] = useState<string | null>(null);
     const [miniProfileData, setMiniProfileData] = useState<MiniProfileResponse | null>(null);
+    const [miniProfileError, setMiniProfileError] = useState<string | null>(null);
     const [isDrawerLoading, setIsDrawerLoading] = useState<boolean>(false);
     const [isDrawerOpen, setIsDrawerOpen] = useState<boolean>(false);
 
@@ -164,33 +170,15 @@ export default function ClusterScatterPlot({ targetCusNum, className, style }: C
             if (!selectedCusNum) return;
             setIsDrawerLoading(true);
             setIsDrawerOpen(true);
+            setMiniProfileData(null);
+            setMiniProfileError(null);
             try {
                 const url = getApiBaseUrl(`/api/customers/${selectedCusNum}/mini-profile`);
                 const res = await axios.get<MiniProfileResponse>(url);
                 setMiniProfileData(res.data);
             } catch (err: any) {
-                console.warn("Mini-profile fetch failed, falling back to mock data", err);
-                // Fallback mock data if backend endpoint is missing or fails
-                setMiniProfileData({
-                    customer_profile: {
-                        cus_num: selectedCusNum,
-                        name: `Customer_${selectedCusNum.slice(-3)}`,
-                        sector: "RETAIL",
-                        risk_rating: selectedCusNum === targetCusNum ? "HIGH" : "LOW",
-                        account_age_days: 1200,
-                        assigned_cluster: "RETAIL Sector",
-                        anomaly_probability: selectedCusNum === targetCusNum ? 0.92 : 0.05
-                    },
-                    xai_context: {
-                        primary_anomaly_drivers: selectedCusNum === targetCusNum 
-                            ? "- Unusually high Average transaction amount (Alert Impact: 18.8%)\n- Unusually high High value transaction count (Alert Impact: 17.9%)"
-                            : "No anomalies detected."
-                    },
-                    recent_transactions: [
-                        { id: "tx1", date: "2025-05-16", amount: 6111.0, direction: "CREDIT", counterparty: "Deposit" },
-                        { id: "tx2", date: "2025-05-14", amount: 306.0, direction: "DEBIT", counterparty: "POS" }
-                    ]
-                });
+                console.warn("Mini-profile fetch failed", err);
+                setMiniProfileError("Customer profile unavailable. No fallback risk classification was applied.");
             } finally {
                 setIsDrawerLoading(false);
             }
@@ -200,7 +188,7 @@ export default function ClusterScatterPlot({ targetCusNum, className, style }: C
 
     const handleCloseDrawer = useCallback(() => {
         setIsDrawerOpen(false);
-        setTimeout(() => { setSelectedCusNum(null); setMiniProfileData(null); }, 300);
+        setTimeout(() => { setSelectedCusNum(null); setMiniProfileData(null); setMiniProfileError(null); }, 300);
     }, []);
 
     const handleNodeClick = useCallback((event: any) => {
@@ -428,7 +416,7 @@ export default function ClusterScatterPlot({ targetCusNum, className, style }: C
             <div className="absolute top-6 right-6 z-30 flex items-center gap-4 bg-[#0F172A]/80 border border-white/10 px-4 py-2 rounded-full backdrop-blur-md">
                 <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-sky-400"></div><span className="text-[10px] text-slate-300 font-medium font-sans">Normal cluster</span></div>
                 <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full border border-rose-400 border-dashed"></div><span className="text-[10px] text-slate-300 font-medium font-sans">Drifting</span></div>
-                <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-rose-500 shadow-[0_0_8px_#F43F5E]"></div><span className="text-[10px] text-white font-medium font-sans">Isolated / High Risk</span></div>
+                <div className="flex items-center gap-1.5"><div className="w-2 h-2 rounded-full bg-rose-500 shadow-[0_0_8px_#F43F5E]"></div><span className="text-[10px] text-white font-medium font-sans">Isolated / High Anomaly</span></div>
                 {mapData.declared_sector && (
                     <div className="flex items-center gap-1.5"><div className="w-2 h-2 rotate-45 bg-[#A855F7]"></div><span className="text-[10px] text-purple-300 font-medium font-sans">Declared Profile</span></div>
                 )}
@@ -469,7 +457,7 @@ export default function ClusterScatterPlot({ targetCusNum, className, style }: C
                         <span className="text-[10px] font-sans uppercase text-slate-400 tracking-wider">Anomaly Probability</span>
                         <div className="flex items-baseline gap-2">
                             <span className={`text-xl font-bold ${probColorClass}`}>{(prob * 100).toFixed(1)}%</span>
-                            <span className="text-[10px] text-slate-500">— higher than {(prob * 100).toFixed(0)}% of monitored accounts</span>
+                            <span className="text-[10px] text-slate-500">model outlier probability</span>
                         </div>
                         {/* Custom gauge/bar proportional to severity */}
                         <div className="h-1.5 w-full bg-slate-800 rounded-full mt-1 overflow-hidden">
@@ -554,10 +542,12 @@ export default function ClusterScatterPlot({ targetCusNum, className, style }: C
                         <div className="space-y-10 animate-in fade-in slide-in-from-right-4 duration-500">
                             <div>
                                 <h1 className="text-3xl font-black text-white tracking-tighter mb-2">{miniProfileData.customer_profile.name}</h1>
-                                <div className="flex flex-wrap gap-2 mb-6">
+                                <div className="flex flex-wrap gap-2 mb-3">
                                     <Chip size="sm" className="font-mono text-[10px] bg-white/5 text-slate-400 border border-white/10">{miniProfileData.customer_profile.cus_num}</Chip>
-                                    <Chip size="sm" color={miniProfileData.customer_profile.risk_rating === "HIGH" ? "danger" : "warning"} variant="flat" className="font-bold text-[10px] uppercase px-3">{miniProfileData.customer_profile.risk_rating} RISK</Chip>
+                                    <Chip size="sm" variant="flat" className="font-bold text-[10px] uppercase px-3 bg-white/5 text-slate-300 border border-white/10">KYC {miniProfileData.customer_profile.kyc_risk || "Unavailable"}</Chip>
+                                    <Chip size="sm" color={miniProfileData.customer_profile.calculated_risk?.toUpperCase() === "HIGH" ? "danger" : miniProfileData.customer_profile.calculated_risk?.toUpperCase() === "LOW" ? "success" : "warning"} variant="flat" className="font-bold text-[10px] uppercase px-3">RBA {miniProfileData.customer_profile.calculated_risk || "Unavailable"}</Chip>
                                 </div>
+                                <p className="text-[10px] font-mono text-slate-500">Behavioral anomaly: {(miniProfileData.customer_profile.anomaly_probability * 100).toFixed(1)}%</p>
                             </div>
 
                             <div>
@@ -602,6 +592,8 @@ export default function ClusterScatterPlot({ targetCusNum, className, style }: C
                                 </div>
                             </div>
                         </div>
+                    ) : miniProfileError ? (
+                        <div className="h-full flex items-center justify-center px-8 text-center text-rose-400 font-mono text-[10px] uppercase tracking-widest">{miniProfileError}</div>
                     ) : (<div className="h-full flex items-center justify-center text-slate-600 font-mono text-[10px] uppercase tracking-widest">Signal Selection Pending</div>)}
                 </div>
             </div>
