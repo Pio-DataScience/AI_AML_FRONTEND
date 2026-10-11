@@ -43,6 +43,7 @@ export function useAlert(country_code: string, inst_code: string, cus_num: strin
 
     // Map of transaction ID -> loading state for Micro level AI generation
     const [isGeneratingMicro, setIsGeneratingMicro] = useState<Record<string, boolean>>({});
+    const [microGenerationErrors, setMicroGenerationErrors] = useState<Record<string, string>>({});
 
     // STABILITY: Track last fetched keys to prevent redundant calls during Next.js hydration
     const lastFetchKey = useRef<string>("");
@@ -64,6 +65,7 @@ export function useAlert(country_code: string, inst_code: string, cus_num: strin
             setCustomerNotFound(false);
             setMacroData(null);
             setMicroLedger([]);
+            setMicroGenerationErrors({});
             setNetworkData(null);
             setCustomerProfile(null);
 
@@ -174,24 +176,20 @@ export function useAlert(country_code: string, inst_code: string, cus_num: strin
     };
 
     // Triggers FastAPI to generate micro narrative for highly specific transaction arrays
-    const triggerMicroNarrative = async (transactionId: string) => {
-        // Oracle's TRANSACTION_KEY comes through as "100376_68_1" instead of "68-1". 
-        // We split by '_' and grab the last two segments as sequence 1 and 2.
-        const idParts = transactionId.split('_');
-        let tra_seq1 = transactionId;
-        let tra_seq2 = "0";
+    const triggerMicroNarrative = async (transaction: MicroPayload) => {
+        const transactionId = transaction.id;
+        const { tra_seq1, tra_seq2 } = transaction;
 
-        if (idParts.length >= 3) {
-            // E.g., [cus_num, tra_seq1, tra_seq2]
-            tra_seq1 = idParts[idParts.length - 2];
-            tra_seq2 = idParts[idParts.length - 1];
-        } else if (transactionId.includes('-')) {
-            const dashParts = transactionId.split('-');
-            tra_seq1 = dashParts[0];
-            tra_seq2 = dashParts[1] || "0";
+        if (!tra_seq1 || !tra_seq2) {
+            setMicroGenerationErrors(prev => ({
+                ...prev,
+                [transactionId]: "This transaction is missing its Oracle sequence identifiers."
+            }));
+            return;
         }
 
         setIsGeneratingMicro(prev => ({ ...prev, [transactionId]: true }));
+        setMicroGenerationErrors(prev => ({ ...prev, [transactionId]: "" }));
         try {
             const res = await generateMicroNarrative(
                 country_code,
@@ -213,6 +211,10 @@ export function useAlert(country_code: string, inst_code: string, cus_num: strin
 
         } catch (err: any) {
             console.error("Micro Narrative Generation Failed: ", err);
+            setMicroGenerationErrors(prev => ({
+                ...prev,
+                [transactionId]: getFriendlyApiErrorMessage(err, "the Micro Insight generator")
+            }));
         } finally {
             setIsGeneratingMicro(prev => ({ ...prev, [transactionId]: false }));
         }
@@ -231,6 +233,7 @@ export function useAlert(country_code: string, inst_code: string, cus_num: strin
         customerNotFound,
         isGeneratingMacro,
         isGeneratingMicro,
+        microGenerationErrors,
         triggerAiNarrative,
         triggerMicroNarrative
     };

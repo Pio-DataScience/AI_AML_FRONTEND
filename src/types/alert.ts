@@ -41,6 +41,8 @@ export interface MacroPayload {
 
 export interface MicroPayload {
     id: string;
+    tra_seq1: string;
+    tra_seq2: string;
     transaction_metadata: {
         date: string;
         amount: number;

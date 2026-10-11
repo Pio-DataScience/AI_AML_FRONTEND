@@ -208,6 +208,8 @@ export const getMicroLedger = async (
 
             return {
                 id: row.TRANSACTION_KEY || `${row.TRA_SEQ1}-${row.TRA_SEQ2}`,
+                tra_seq1: String(row.TRA_SEQ1 ?? ""),
+                tra_seq2: String(row.TRA_SEQ2 ?? ""),
                 transaction_metadata: {
                     amount: amountVal == null
                         ? null
@@ -261,7 +263,7 @@ export const generateMicroNarrative = async (
 ): Promise<{ narrative: string }> => {
     try {
         const response = await api.post<{ narrative: string }>(
-            `/alerts/${country_code}/${inst_code}/${cus_num}/${day_date}/transactions/${tra_seq1}/${tra_seq2}/generate-micro-narrative`
+            `/alerts/${encodeURIComponent(country_code)}/${encodeURIComponent(inst_code)}/${encodeURIComponent(cus_num)}/${encodeURIComponent(day_date)}/transactions/${encodeURIComponent(tra_seq1)}/${encodeURIComponent(tra_seq2)}/generate-micro-narrative`
         );
         return response.data;
     } catch (error) {

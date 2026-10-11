@@ -672,11 +672,12 @@ function NetworkSyndicateZone({ data, isLoading, t }: { data: NetworkGraphData |
 }
 
 // ── Micro Ledger Zone ─────────────────────────────────────────────────────────
-function MicroLedgerZone({ microLedger, validMicroLedger, selectedMicroData, isGeneratingMicro, triggerMicroNarrative, selectedKeys, setSelectedKeys, tableRef, noAlert, microError, t }: {
+function MicroLedgerZone({ microLedger, validMicroLedger, selectedMicroData, isGeneratingMicro, microGenerationErrors, triggerMicroNarrative, selectedKeys, setSelectedKeys, tableRef, noAlert, microError, t }: {
     microLedger: MicroPayload[]; validMicroLedger: MicroPayload[];
     selectedMicroData?: MicroPayload | null;
     isGeneratingMicro: Record<string, boolean>;
-    triggerMicroNarrative: (id: string) => void;
+    microGenerationErrors: Record<string, string>;
+    triggerMicroNarrative: (transaction: MicroPayload) => void;
     selectedKeys: Set<string>;
     setSelectedKeys: (keys: Set<string>) => void;
     tableRef: React.RefObject<HTMLDivElement | null>;
@@ -835,11 +836,16 @@ function MicroLedgerZone({ microLedger, validMicroLedger, selectedMicroData, isG
                                 ) : (
                                     <AIThinkingButton
                                         isLoading={!!isGeneratingMicro[selectedMicroData.id]}
-                                        onClick={() => triggerMicroNarrative(selectedMicroData.id)}
+                                        onClick={() => triggerMicroNarrative(selectedMicroData)}
                                         label="Generate AI Micro Insight"
                                         accentColor={sev.color}
                                         disabled={!!isGeneratingMicro[selectedMicroData.id]}
                                     />
+                                )}
+                                {microGenerationErrors[selectedMicroData.id] && (
+                                    <p className="mt-3 text-xs leading-relaxed" style={{ color: "#F43F5E", fontFamily: t.fontMono }}>
+                                        {microGenerationErrors[selectedMicroData.id]}
+                                    </p>
                                 )}
                             </div>
                         </div>
@@ -887,7 +893,7 @@ function AlertCockpitContent() {
         getTransactionHistory(country_code, inst_code, cus_num).then(setHistory).catch(console.error);
     }, [country_code, inst_code, cus_num]);
 
-    const { macroData, microLedger, networkData, customerProfile, isLoading, isNetworkLoading, error, microError, noAlert, customerNotFound, isGeneratingMacro, isGeneratingMicro, triggerAiNarrative, triggerMicroNarrative } = useAlert(country_code, inst_code, cus_num, day_date, tra_seq1, tra_seq2);
+    const { macroData, microLedger, networkData, customerProfile, isLoading, isNetworkLoading, error, microError, noAlert, customerNotFound, isGeneratingMacro, isGeneratingMicro, microGenerationErrors, triggerAiNarrative, triggerMicroNarrative } = useAlert(country_code, inst_code, cus_num, day_date, tra_seq1, tra_seq2);
 
     const handleTransactionClick = (id: string) => {
         setSelectedKeys(new Set([id]));
@@ -987,7 +993,7 @@ function AlertCockpitContent() {
 
                 {!isLoading && (
                     <div ref={tableRef}>
-                        <MicroLedgerZone microLedger={microLedger} validMicroLedger={validMicroLedger} selectedMicroData={selectedMicroData} isGeneratingMicro={isGeneratingMicro} triggerMicroNarrative={triggerMicroNarrative} selectedKeys={selectedKeys} setSelectedKeys={setSelectedKeys} tableRef={tableRef} noAlert={noAlert} microError={microError} t={t} />
+                        <MicroLedgerZone microLedger={microLedger} validMicroLedger={validMicroLedger} selectedMicroData={selectedMicroData} isGeneratingMicro={isGeneratingMicro} microGenerationErrors={microGenerationErrors} triggerMicroNarrative={triggerMicroNarrative} selectedKeys={selectedKeys} setSelectedKeys={setSelectedKeys} tableRef={tableRef} noAlert={noAlert} microError={microError} t={t} />
                     </div>
                 )}
             </main>

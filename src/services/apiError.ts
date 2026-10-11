@@ -29,6 +29,10 @@ export function getFriendlyApiErrorMessage(
             return `Access to this resource was denied (HTTP ${status}).`;
         }
         if (status === 404) {
+            const detail = (error.response.data as { detail?: unknown } | undefined)?.detail;
+            if (typeof detail === "string" && detail.trim()) {
+                return detail;
+            }
             return `The requested resource was not found (HTTP 404).`;
         }
         return `The request failed (HTTP ${status}). Please try again.`;
