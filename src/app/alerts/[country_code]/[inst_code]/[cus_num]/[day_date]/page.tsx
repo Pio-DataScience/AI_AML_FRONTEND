@@ -6,7 +6,7 @@ import { useTheme } from "next-themes";
 import Plot from "@/components/PlotlyWrapper";
 import { useAlert } from "@/hooks/useAlert";
 import MarkdownRenderer from "@/components/MarkdownRenderer";
-import { MacroPayload, MicroPayload, NetworkGraphData } from "@/types/alert";
+import { CustomerProfile, MacroPayload, MicroPayload, NetworkGraphData } from "@/types/alert";
 import { CustomerMiniProfileResponse } from "@/types/customer";
 import { getTransactionHistory } from "@/services/alertService";
 import Customer360Glance from "@/components/Customer360Glance";
@@ -125,8 +125,9 @@ function Panel({ children, t, style, className }: { children: React.ReactNode; t
 }
 
 // ── Macro Zone ────────────────────────────────────────────────────────────────
-function MacroContextZone({ macroData, cus_num, day_date, isLoading, isGeneratingMacro, triggerAiNarrative, t }: {
+function MacroContextZone({ macroData, customer360Profile, cus_num, day_date, isLoading, isGeneratingMacro, triggerAiNarrative, t }: {
     macroData: MacroPayload | null;
+    customer360Profile: CustomerProfile | null;
     cus_num: string; day_date: string; isLoading: boolean;
     isGeneratingMacro: boolean; triggerAiNarrative: () => void;
     t: ReturnType<typeof useCockpitTheme>;
@@ -148,7 +149,7 @@ function MacroContextZone({ macroData, cus_num, day_date, isLoading, isGeneratin
     return (
         <section className="mb-8 flex flex-col gap-5">
             {/* Customer 360 Glance */}
-            <Customer360Glance rawJson={macroData.customer_360_snapshot} />
+            <Customer360Glance rawJson={customer360Profile || macroData.customer_360_snapshot} />
 
             {/* Forensic AI Narrative */}
             <Panel t={t} style={{ padding: "1.5rem" }}>
@@ -879,7 +880,7 @@ function AlertCockpitContent() {
         getTransactionHistory(country_code, inst_code, cus_num).then(setHistory).catch(console.error);
     }, [country_code, inst_code, cus_num]);
 
-    const { macroData, microLedger, networkData, customerProfile, isLoading, isNetworkLoading, error, microError, noAlert, customerNotFound, isGeneratingMacro, isGeneratingMicro, triggerAiNarrative, triggerMicroNarrative } = useAlert(country_code, inst_code, cus_num, day_date, tra_seq1, tra_seq2);
+    const { macroData, microLedger, networkData, customerProfile, customer360Profile, isLoading, isNetworkLoading, error, microError, noAlert, customerNotFound, isGeneratingMacro, isGeneratingMicro, triggerAiNarrative, triggerMicroNarrative } = useAlert(country_code, inst_code, cus_num, day_date, tra_seq1, tra_seq2);
 
     const handleTransactionClick = (id: string) => {
         setSelectedKeys(new Set([id]));
@@ -970,7 +971,7 @@ function AlertCockpitContent() {
                         t={t}
                     />
                 ) : (
-                    <MacroContextZone macroData={macroData} cus_num={cus_num} day_date={day_date} isLoading={isLoading} isGeneratingMacro={isGeneratingMacro} triggerAiNarrative={triggerAiNarrative} t={t} />
+                    <MacroContextZone macroData={macroData} customer360Profile={customer360Profile} cus_num={cus_num} day_date={day_date} isLoading={isLoading} isGeneratingMacro={isGeneratingMacro} triggerAiNarrative={triggerAiNarrative} t={t} />
                 )}
 
                 {!isLoading && <VisualEvidenceZone macroData={macroData} microLedger={microLedger} history={history} selectedMicroData={selectedMicroData} onTransactionClick={handleTransactionClick} cus_num={cus_num} t={t} />}

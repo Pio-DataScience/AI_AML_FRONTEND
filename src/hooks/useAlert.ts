@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef } from "react";
 import { getMacroAlert, getMicroLedger, getNetworkGraph, generateMacroNarrative, generateMicroNarrative } from "@/services/alertService";
-import { getCustomerMiniProfile } from "@/services/customerService";
+import { getCustomer360, getCustomerMiniProfile } from "@/services/customerService";
 import { getFriendlyApiErrorMessage } from "@/services/apiError";
-import { MacroPayload, MicroPayload, NetworkGraphData } from "@/types/alert";
+import { CustomerProfile, MacroPayload, MicroPayload, NetworkGraphData } from "@/types/alert";
 import { CustomerMiniProfileResponse } from "@/types/customer";
 
 /**
@@ -25,6 +25,7 @@ export function useAlert(country_code: string, inst_code: string, cus_num: strin
     const [microLedger, setMicroLedger] = useState<MicroPayload[]>([]);
     const [networkData, setNetworkData] = useState<NetworkGraphData | null>(null);
     const [customerProfile, setCustomerProfile] = useState<CustomerMiniProfileResponse | null>(null);
+    const [customer360Profile, setCustomer360Profile] = useState<CustomerProfile | null>(null);
 
     const [isLoading, setIsLoading] = useState<boolean>(true);
     const [isNetworkLoading, setIsNetworkLoading] = useState<boolean>(true);
@@ -66,6 +67,7 @@ export function useAlert(country_code: string, inst_code: string, cus_num: strin
             setMicroLedger([]);
             setNetworkData(null);
             setCustomerProfile(null);
+            setCustomer360Profile(null);
 
             // Validate all keys exist before making backend calls
             if (!country_code || !inst_code || !cus_num || !day_date) {
@@ -83,13 +85,15 @@ export function useAlert(country_code: string, inst_code: string, cus_num: strin
             const macroRequest = settle(getMacroAlert(country_code, inst_code, cus_num, day_date));
             const microRequest = settle(getMicroLedger(country_code, inst_code, cus_num, day_date, tra_seq1, tra_seq2));
             const profileRequest = settle(getCustomerMiniProfile(cus_num));
+            const customer360Request = settle(getCustomer360(cus_num));
             const networkRequest = getNetworkGraph(country_code, inst_code, cus_num, day_date)
                 .catch((): NetworkGraphData => ({ nodes: [], edges: [] }));
 
-            const [macroResult, microResult, profileResult] = await Promise.all([
+            const [macroResult, microResult, profileResult, customer360Result] = await Promise.all([
                 macroRequest,
                 microRequest,
                 profileRequest,
+                customer360Request,
             ]);
 
             if (!isMounted) return;
@@ -99,6 +103,9 @@ export function useAlert(country_code: string, inst_code: string, cus_num: strin
             // there is no AML alert.
             if (profileResult.ok && profileResult.value) {
                 setCustomerProfile(profileResult.value);
+            }
+            if (customer360Result.ok && customer360Result.value) {
+                setCustomer360Profile(customer360Result.value);
             }
 
             // ── Macro alert ───────────────────────────────────────────────
@@ -223,6 +230,7 @@ export function useAlert(country_code: string, inst_code: string, cus_num: strin
         microLedger,
         networkData,
         customerProfile,
+        customer360Profile,
         isLoading,
         isNetworkLoading,
         error,

@@ -1,6 +1,7 @@
 import axios from "axios";
 import { getApiBaseUrl } from "./apiConfig";
 import { CustomerMiniProfileResponse } from "@/types/customer";
+import { CustomerProfile } from "@/types/alert";
 
 const api = axios.create();
 
@@ -37,6 +38,30 @@ export const getCustomerMiniProfile = async (
             }
         }
         console.error(`Failed to fetch mini-profile for ${cus_num}:`, error);
+        throw error;
+    }
+};
+
+/**
+ * Fetch the canonical Customer 360 profile independently of alert payloads.
+ * Historical macro payloads may predate the embedded 360 snapshot.
+ */
+export const getCustomer360 = async (
+    cus_num: string
+): Promise<CustomerProfile | null> => {
+    try {
+        const response = await api.get<CustomerProfile>(
+            `/customers/${cus_num}/customer-360`
+        );
+        return response.data || null;
+    } catch (error) {
+        if (axios.isAxiosError(error) && error.response?.status === 404) {
+            const detail = (error.response.data as { detail?: unknown } | undefined)?.detail;
+            if (typeof detail === "string" && detail.toLowerCase().includes("customer 360 profile not found")) {
+                return null;
+            }
+        }
+        console.error(`Failed to fetch Customer 360 for ${cus_num}:`, error);
         throw error;
     }
 };

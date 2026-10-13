@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useMemo } from "react";
-import { Card, CardBody, Chip, Divider, Tooltip } from "@heroui/react";
+import { Card, CardBody, Chip, Divider } from "@heroui/react";
 import { CustomerProfile } from "@/types/alert";
 
 interface Customer360GlanceProps {
@@ -36,13 +36,10 @@ export default function Customer360Glance({ rawJson }: Customer360GlanceProps) {
 
     if (!profile) {
         return (
-            <div className="mb-6 p-4 border-2 border-dashed border-red-500 bg-red-50 text-red-700 rounded-lg animate-pulse">
-                <p className="font-black text-center text-xs uppercase tracking-widest">
-                    🚨 DEBUG: [Customer360Glance] MOUNTED BUT DATA IS MISSING 🚨
+            <div className="mb-6 p-4 border border-dashed border-slate-300 bg-slate-50/70 text-slate-500 rounded-lg">
+                <p className="font-bold text-center text-xs uppercase tracking-widest">
+                    Customer 360 profile unavailable
                 </p>
-                <div className="text-[10px] mt-2 font-mono break-all opacity-70">
-                    Prop `rawJson`: {rawJson ? "EXISTS BUT PARSE FAILED / SCHEMA MISMATCH" : "UNDEFINED/NULL"}
-                </div>
             </div>
         );
     }

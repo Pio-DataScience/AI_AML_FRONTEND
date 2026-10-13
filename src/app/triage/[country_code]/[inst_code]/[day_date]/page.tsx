@@ -6,6 +6,8 @@ import Link from "next/link";
 import { useTheme } from "next-themes";
 import { useTriageQueue } from "@/hooks/useTriageQueue";
 import { TriagePayload } from "@/types/triage";
+import { CustomerProfile } from "@/types/alert";
+import { getCustomer360 } from "@/services/customerService";
 import MarkdownRenderer from "@/components/MarkdownRenderer";
 import Customer360Glance from "@/components/Customer360Glance";
 
@@ -233,6 +235,31 @@ function XAIPanel({ selectedAlert, isGeneratingNarrative, triggerNarrative, coun
   day_date: string;
   t: ReturnType<typeof useTriageTheme>;
 }) {
+  const [liveCustomer360, setLiveCustomer360] = useState<{
+    customerNumber: string;
+    profile: CustomerProfile;
+  } | null>(null);
+
+  useEffect(() => {
+    let active = true;
+
+    if (!selectedAlert || selectedAlert.customer_360_snapshot) {
+      return () => { active = false; };
+    }
+
+    getCustomer360(selectedAlert.customer_number)
+      .then(profile => {
+        if (active && profile) {
+          setLiveCustomer360({ customerNumber: selectedAlert.customer_number, profile });
+        }
+      })
+      .catch(error => {
+        console.warn(`Customer 360 fallback failed for ${selectedAlert.customer_number}:`, error);
+      });
+
+    return () => { active = false; };
+  }, [selectedAlert]);
+
   if (!selectedAlert) {
     return (
       <div className="flex flex-col items-center justify-center h-full gap-4 p-10 text-center">
@@ -250,6 +277,9 @@ function XAIPanel({ selectedAlert, isGeneratingNarrative, triggerNarrative, coun
   }
 
   const { ai_verdict, legacy_context, explanation } = selectedAlert;
+  const fallbackCustomer360 = liveCustomer360?.customerNumber === selectedAlert.customer_number
+    ? liveCustomer360.profile
+    : undefined;
   const confidence = parseFloat(ai_verdict?.confidence_score || "0");
   const { label, color, glow, badge, badgeText, ring } = getRiskMeta(ai_verdict?.decision || "");
   const drivers = explanation?.top_drivers || [];
@@ -306,7 +336,7 @@ function XAIPanel({ selectedAlert, isGeneratingNarrative, triggerNarrative, coun
 
       {/* Customer 360 */}
       <div className="px-5 pt-5">
-        <Customer360Glance rawJson={selectedAlert.customer_360_snapshot} />
+        <Customer360Glance rawJson={selectedAlert.customer_360_snapshot || fallbackCustomer360} />
       </div>
 
       {/* SHAP Drivers */}
